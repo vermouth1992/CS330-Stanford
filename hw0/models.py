@@ -96,7 +96,7 @@ class MultiTaskNet(nn.Module):
             self.regression_Q = self.Q
         else:
             self.regression_U = ScaledEmbedding(num_embeddings=num_users, embedding_dim=embedding_dim, sparse=sparse)
-            self.regression_Q = ScaledEmbedding(num_embeddings=num_users, embedding_dim=embedding_dim, sparse=sparse)
+            self.regression_Q = ScaledEmbedding(num_embeddings=num_items, embedding_dim=embedding_dim, sparse=sparse)
 
         # ********************************************************
         # ******************* YOUR CODE HERE *********************
