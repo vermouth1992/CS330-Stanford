@@ -1,3 +1,5 @@
+*.zip
+omniglot_resized
 .idea
 .DS_Store
 run

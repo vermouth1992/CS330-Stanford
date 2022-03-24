@@ -15,37 +15,37 @@ class MANN(nn.Module):
 
     def __init__(self, num_classes, samples_per_class, model_size=128, input_size=784):
         super(MANN, self).__init__()
-        
+
         def initialize_weights(model):
             nn.init.xavier_uniform_(model.weight_ih_l0)
             nn.init.zeros_(model.bias_hh_l0)
             nn.init.zeros_(model.bias_ih_l0)
-    
+
         self.num_classes = num_classes
         self.samples_per_class = samples_per_class
         self.input_size = input_size
-        self.layer1 = torch.nn.LSTM(num_classes + input_size, 
-                                    model_size, 
+        self.layer1 = torch.nn.LSTM(num_classes + input_size,
+                                    model_size,
                                     batch_first=True)
         self.layer2 = torch.nn.LSTM(model_size,
                                     num_classes,
                                     batch_first=True)
         initialize_weights(self.layer1)
         initialize_weights(self.layer2)
-        
+
         self.dnc = DNC(
-                       input_size=num_classes + input_size,
-                       output_size=num_classes,
-                       hidden_size=model_size,
-                       rnn_type='lstm',
-                       num_layers=1,
-                       num_hidden_layers=1,
-                       nr_cells=num_classes,
-                       cell_size=64,
-                       read_heads=1,
-                       batch_first=True,
-                       gpu_id=0,
-                       )
+            input_size=num_classes + input_size,
+            output_size=num_classes,
+            hidden_size=model_size,
+            rnn_type='lstm',
+            num_layers=1,
+            num_hidden_layers=1,
+            nr_cells=num_classes,
+            cell_size=64,
+            read_heads=1,
+            batch_first=True,
+            gpu_id=0,
+        )
 
     def forward(self, input_images, input_labels):
         """
@@ -66,7 +66,22 @@ class MANN(nn.Module):
         #############################
 
         # SOLUTION:
+        batch_size = input_images.shape[0]
+        support_images = input_images[:, :-1, :, :]  # (B, K, N, 784)
+        support_labels = input_labels[:, :-1, :, :]  # (B, K, N, N)
+        query_images = input_images[:, -1:, :, :]  # (B, 1, N, 784)
+        query_labels = torch.zeros_like(input_labels[:, -1:, :, :])  # (B, 1, N, N)
 
+        support_input = torch.cat((support_images, support_labels), dim=-1)  # (B, K, N, 784 + N)
+        query_input = torch.cat((query_images, query_labels), dim=-1)  # (B, 1, N, 784 + N)
+
+        input = torch.cat((support_input, query_input), dim=1)  # (B, K + 1, N, 784 + N)
+        input = torch.reshape(input, (batch_size, -1, self.input_size + self.num_classes))  # (B, (K+1) * N, 784 + N)
+
+        input = self.layer1(input)  # (B, (K+1) * N, model_size)
+        input = self.layer2(input)  # (B, (K+1) * N, N)
+        input = torch.reshape(input, shape=(batch_size, -1, self.num_classes, self.num_classes))
+        return input
 
     def loss_function(self, preds, labels):
         """
@@ -85,14 +100,21 @@ class MANN(nn.Module):
         #### YOUR CODE GOES HERE ####
         #############################
 
-        # SOLUTION:        
-
+        # SOLUTION:
+        # we only care about the query images
+        preds = preds[:, -1, :, :]  # (B, N, N)
+        preds = torch.reshape(preds, shape=(-1, self.num_classes))
+        labels = labels[:, -1, :, :]
+        labels = torch.argmax(labels, dim=-1)  # (B, N)
+        labels = torch.reshape(labels, shape=(-1,))
+        loss = F.cross_entropy(preds, labels)
+        return loss
 
 
 def train_step(images, labels, model, optim):
     predictions = model(images, labels)
     loss = model.loss_function(predictions, labels)
-    
+
     optim.zero_grad()
     loss.backward()
     optim.step()
@@ -117,43 +139,44 @@ def main(config):
     assert os.path.isdir('./omniglot_resized')
 
     # Create Data Generator
-    data_generator = DataGenerator(config.num_classes, 
-                                   config.num_samples, 
+    data_generator = DataGenerator(config.num_classes,
+                                   config.num_samples,
                                    device=device)
 
     # Create model and optimizer
-    model = MANN(config.num_classes, config.num_samples, 
+    model = MANN(config.num_classes, config.num_samples,
                  model_size=config.model_size)
     model.to(device)
-    optim = torch.optim.Adam(model.parameters(), lr = 1e-3)
-    
+    optim = torch.optim.Adam(model.parameters(), lr=1e-3)
+
     for step in range(config.training_steps):
         images, labels = data_generator.sample_batch('train', config.meta_batch_size)
         _, train_loss = train_step(images, labels, model, optim)
 
         if (step + 1) % config.log_every == 0:
-            images, labels = data_generator.sample_batch('test', 
+            images, labels = data_generator.sample_batch('test',
                                                          config.meta_batch_size)
             pred, test_loss = model_eval(images, labels, model)
-            pred = torch.reshape(pred, [-1, 
-                                        config.num_samples + 1, 
-                                        config.num_classes, 
+            pred = torch.reshape(pred, [-1,
+                                        config.num_samples + 1,
+                                        config.num_classes,
                                         config.num_classes])
-            pred = torch.argmax(pred[:, -1, :, :], axis=2)
-            labels = torch.argmax(labels[:, -1, :, :], axis=2)
-            
+            pred = torch.argmax(pred[:, -1, :, :], dim=2)
+            labels = torch.argmax(labels[:, -1, :, :], dim=2)
+
             writer.add_scalar('Train Loss', train_loss.cpu().numpy(), step)
             writer.add_scalar('Test Loss', test_loss.cpu().numpy(), step)
-            writer.add_scalar('Meta-Test Accuracy', 
+            writer.add_scalar('Meta-Test Accuracy',
                               pred.eq(labels).double().mean().item(),
                               step)
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_classes', type=int, default=5)
     parser.add_argument('--num_samples', type=int, default=1)
     parser.add_argument('--meta_batch_size', type=int, default=128)
-    parser.add_argument('--logdir', type=str, 
+    parser.add_argument('--logdir', type=str,
                         default='run/log')
     parser.add_argument('--training_steps', type=int, default=10000)
     parser.add_argument('--log_every', type=int, default=100)
