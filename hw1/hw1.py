@@ -1,14 +1,15 @@
 import argparse
 import os
+
 import torch
-
 import torch.nn.functional as F
-
-from torch import nn
-from load_data import DataGenerator
-from dnc import DNC
 from google_drive_downloader import GoogleDriveDownloader as gdd
+from torch import nn
 from torch.utils.tensorboard import SummaryWriter
+from tqdm.auto import trange
+
+from dnc import DNC
+from load_data import DataGenerator
 
 
 class MANN(nn.Module):
@@ -78,8 +79,8 @@ class MANN(nn.Module):
         input = torch.cat((support_input, query_input), dim=1)  # (B, K + 1, N, 784 + N)
         input = torch.reshape(input, (batch_size, -1, self.input_size + self.num_classes))  # (B, (K+1) * N, 784 + N)
 
-        input = self.layer1(input)  # (B, (K+1) * N, model_size)
-        input = self.layer2(input)  # (B, (K+1) * N, N)
+        input, _ = self.layer1(input)  # (B, (K+1) * N, model_size)
+        input, _ = self.layer2(input)  # (B, (K+1) * N, N)
         input = torch.reshape(input, shape=(batch_size, -1, self.num_classes, self.num_classes))
         return input
 
@@ -149,7 +150,7 @@ def main(config):
     model.to(device)
     optim = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    for step in range(config.training_steps):
+    for step in trange(config.training_steps):
         images, labels = data_generator.sample_batch('train', config.meta_batch_size)
         _, train_loss = train_step(images, labels, model, optim)
 

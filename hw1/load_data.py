@@ -1,6 +1,7 @@
-import numpy as np
 import os
 import random
+
+import numpy as np
 import torch
 
 
@@ -124,7 +125,7 @@ class DataGenerator(object):
         # SOLUTION:
         images = []
         labels = []
-        one_hot_label = np.eye(self.num_classes)
+        one_hot_label = np.eye(self.num_classes, dtype=np.float32)
 
         for _ in range(batch_size):
             # step 1: sample N different characters
@@ -152,6 +153,9 @@ class DataGenerator(object):
 
         images = np.asarray(images)
         labels = np.asarray(labels)
+
+        images = torch.as_tensor(images, device=self.device)
+        labels = torch.as_tensor(labels, device=self.device)
 
         return images, labels
 
