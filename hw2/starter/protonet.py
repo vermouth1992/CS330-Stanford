@@ -114,9 +114,9 @@ class ProtoNet:
         for task in task_batch:
             images_support, labels_support, images_query, labels_query = task
             images_support = images_support.to(DEVICE)
-            labels_support = labels_support.to(DEVICE)
+            labels_support = labels_support.to(DEVICE)  # (ways * support,)
             images_query = images_query.to(DEVICE)
-            labels_query = labels_query.to(DEVICE)
+            labels_query = labels_query.to(DEVICE)  # (num_query,)
             # ********************************************************
             # ******************* YOUR CODE HERE *********************
             # ********************************************************
@@ -126,6 +126,30 @@ class ProtoNet:
             # Use util.score to compute accuracies.
             # Make sure to populate loss_batch, accuracy_support_batch, and
             # accuracy_query_batch.
+
+            num_ways = (torch.max(labels_support) + 1).item()
+            features_support = self._network(images_support)  # (ways * support, features)
+            num_features = features_support.shape[-1]
+            features_query = self._network(images_query)  # (num_query, features)
+            c_n = torch.reshape(features_support, shape=(num_ways, -1, num_features))
+
+            c_n = torch.mean(c_n, dim=1)  # (num_ways, num_features)
+            c_n = torch.unsqueeze(c_n, dim=0)  # (1, num_ways, num_features)
+            features_query = torch.unsqueeze(features_query, dim=1)  # (num_query, 1, features)
+
+            distance_query = -torch.sum((features_query - c_n) ** 2, dim=-1)  # (num_query, num_ways)
+
+            loss = F.cross_entropy(distance_query, labels_query)
+            loss_batch.append(loss)
+
+            with torch.no_grad():
+                accuracy_query = util.score(distance_query, labels_query)
+                features_support = torch.unsqueeze(features_support, dim=1)  # (num_support, 1, features)
+                distance_support = -torch.sum((features_support - c_n) ** 2, dim=-1)  # (num_support, num_ways)
+                accuracy_support = util.score(distance_support, labels_support)
+
+                accuracy_support_batch.append(accuracy_support)
+                accuracy_query_batch.append(accuracy_query)
 
             # ********************************************************
             # ******************* YOUR CODE HERE *********************
