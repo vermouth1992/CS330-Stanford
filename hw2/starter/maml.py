@@ -1,13 +1,13 @@
 """Implementation of model-agnostic meta-learning for Omniglot."""
 
 import argparse
+import contextlib
 import os
 
 import numpy as np
 import torch
-from torch import nn
 import torch.nn.functional as F
-from torch import autograd  # pylint: disable=unused-import
+from torch import nn
 from torch.utils import tensorboard
 
 import omniglot
@@ -149,7 +149,7 @@ class MAML:
             bias=parameters[f'b{NUM_CONV_LAYERS}']
         )
 
-    def _inner_loop(self, images, labels, train):   # pylint: disable=unused-argument
+    def _inner_loop(self, images, labels, train):  # pylint: disable=unused-argument
         """Computes the adapted network parameters via the MAML inner loop.
 
         Args:
@@ -178,6 +178,33 @@ class MAML:
         # Make sure to populate accuracies and update parameters.
         # Use F.cross_entropy to compute classification losses.
         # Use util.score to compute accuracies.
+        for _ in range(self._num_inner_steps):
+            logit_support = self._forward(images, parameters)
+            inner_loss = F.cross_entropy(logit_support, labels)
+
+            with torch.no_grad():
+                accuracies.append(util.score(logit_support, labels))
+
+            # inner update
+            flat_parameters = []
+            index_dict = {}
+            i = 0
+            for k, v in parameters.items():
+                flat_parameters.append(v)
+                index_dict[k] = i
+                i += 1
+
+            grads_list = torch.autograd.grad(inner_loss, flat_parameters, retain_graph=train)
+            grads = {}
+            for k, v in index_dict.items():
+                grads[k] = grads_list[v]
+
+            for k, v in parameters.items():
+                parameters[k] = v - self._inner_lrs[k] * grads[k]
+
+        with torch.no_grad():
+            logit_support = self._forward(images, parameters)
+            accuracies.append(util.score(logit_support, labels))
 
         # ********************************************************
         # ******************* YOUR CODE HERE *********************
@@ -218,6 +245,19 @@ class MAML:
             # Use util.score to compute accuracies.
             # Make sure to populate outer_loss_batch, accuracies_support_batch,
             # and accuracy_query_batch.
+            adapted_parameters, accuracy_support = self._inner_loop(images_support, labels_support, train=train)
+
+            cm = contextlib.nullcontext() if train else torch.no_grad()
+
+            with cm:
+                logit_query = self._forward(images_query, adapted_parameters)
+                outer_loss = F.cross_entropy(logit_query, labels_query)
+                outer_loss_batch.append(outer_loss)
+
+            with torch.no_grad():
+                accuracy_query = util.score(logit_query, labels_query)
+                accuracies_support_batch.append(accuracy_support)
+                accuracy_query_batch.append(accuracy_query)
 
             # ********************************************************
             # ******************* YOUR CODE HERE *********************
