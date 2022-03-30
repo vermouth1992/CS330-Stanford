@@ -37,7 +37,7 @@ def run_episode(
         # ======================== TODO modify code ========================
 
         # append goal state to input, and prepare for feeding to the q-network
-        concat_state = np.concatenate((state, goal_state), axis=0)
+        concat_state = np.concatenate((state, goal_state), axis=0).astype(np.float32)
 
         # forward pass to find action
         action = torch.argmax(q_net(torch.as_tensor(np.expand_dims(concat_state, axis=0))), dim=-1).item()
