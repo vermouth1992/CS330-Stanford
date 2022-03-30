@@ -1,14 +1,15 @@
 """Run the Q-network on the environment for fixed steps.
 
 Complete the code marked TODO."""
-import numpy as np # pylint: disable=unused-import
-import torch # pylint: disable=unused-import
+import gym
+import numpy as np  # pylint: disable=unused-import
+import torch  # pylint: disable=unused-import
 
 
 def run_episode(
-    env,
-    q_net, # pylint: disable=unused-argument
-    steps_per_episode,
+        env: gym.Env,
+        q_net,  # pylint: disable=unused-argument
+        steps_per_episode,
 ):
     """Runs the current policy on the given environment.
 
@@ -30,29 +31,36 @@ def run_episode(
     episodic_return = 0.0
 
     # reset the environment to get the initial state
-    state, goal_state = env.reset() # pylint: disable=unused-variable
+    state, goal_state = env.reset()  # pylint: disable=unused-variable
 
     for _ in range(steps_per_episode):
-
         # ======================== TODO modify code ========================
-        pass
 
         # append goal state to input, and prepare for feeding to the q-network
+        concat_state = np.concatenate((state, goal_state), axis=0)
 
         # forward pass to find action
+        action = torch.argmax(q_net(torch.as_tensor(np.expand_dims(concat_state, axis=0))), dim=-1).item()
 
         # take action, use env.step
+        next_state, reward, done, info = env.step(action)
 
         # add transition to episode_experience as a tuple of
         # (state, action, reward, next_state, goal)
+        episode_experience.append((state, action, reward, next_state, goal_state))
 
         # update episodic return
+        episodic_return += reward
 
         # update state
+        state = next_state
 
         # update succeeded bool from the info returned by env.step
+        succeeded = succeeded or info['successful_this_state']
 
         # break the episode if done=True
+        if done:
+            break
 
         # ========================      END TODO       ========================
 

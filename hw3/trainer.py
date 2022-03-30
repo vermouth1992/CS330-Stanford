@@ -13,12 +13,13 @@ import run_episode
 import utils
 from utils import HERType
 
+
 def update_replay_buffer(
-    replay_buffer,
-    episode_experience,
-    her_type=HERType.NO_HINDSIGHT,
-    env_reward_function=None, # pylint: disable=unused-argument
-    num_relabeled=4, # pylint: disable=unused-argument
+        replay_buffer,
+        episode_experience,
+        her_type=HERType.NO_HINDSIGHT,
+        env_reward_function=None,  # pylint: disable=unused-argument
+        num_relabeled=4,  # pylint: disable=unused-argument
 ):
     """Adds past experience to the replay buffer. Training is done with
     episodes from the replay buffer. When HER is used, relabeled
@@ -48,58 +49,77 @@ def update_replay_buffer(
 
         if her_type == HERType.FINAL:
             # relabel episode based on final state in episode
-            pass
 
             # get final goal
-
+            goal = episode_experience[-1][3]  # the next_state of the last transition
             # compute new reward
+            reward = env_reward_function(state, goal)
 
             # add to buffer
+            replay_buffer.add(np.append(state, goal),
+                              action,
+                              reward,
+                              np.append(next_state, goal))
+
 
         elif her_type == HERType.FUTURE:
             # future: relabel episode based on randomly sampled future state.
             # At each timestep t, relabel the goal with a randomly selected
             # timestep between t and the end of the episode
-            pass
 
             # for every transition, add num_relabeled transitions to the buffer
 
-            # get random future goal
+            for _ in range(num_relabeled):
+                # get random future goal
+                goal_idx = np.random.randint(low=timestep, high=len(episode_experience))
+                goal = episode_experience[goal_idx][3]
 
-            # compute new reward
+                # compute new reward
+                reward = env_reward_function(state, goal)
 
-            # add to replay buffer
+                # add to replay buffer
+                replay_buffer.add(np.append(state, goal),
+                                  action,
+                                  reward,
+                                  np.append(next_state, goal))
 
         elif her_type == HERType.RANDOM:
             # random: relabel episode based on a random state from the episode
-            pass
 
             # for every transition, add num_relabeled transitions to the buffer
+            for _ in range(num_relabeled):
+                # get random goal
+                goal_idx = np.random.randint(low=0, high=len(episode_experience))
+                goal = episode_experience[goal_idx][3]
 
-            # get random goal
+                # compute new reward
+                reward = env_reward_function(state, goal)
 
-            # compute new reward
-
-            # add to replay buffer
+                # add to replay buffer
+                replay_buffer.add(np.append(state, goal),
+                                  action,
+                                  reward,
+                                  np.append(next_state, goal))
 
         # ========================      END TODO       ========================
 
+
 def train(
-    env,
-    input_dim,
-    action_dim,
-    num_epochs,
-    writer,
-    her_type=HERType.NO_HINDSIGHT,
-    env_reward_function=None,
-    num_relabeled=4,
-    buffer_size=1e6,
-    num_episodes=16,
-    steps_per_episode=50,
-    gamma=0.98,
-    opt_steps=40,
-    batch_size=128,
-    log_interval=5,
+        env,
+        input_dim,
+        action_dim,
+        num_epochs,
+        writer,
+        her_type=HERType.NO_HINDSIGHT,
+        env_reward_function=None,
+        num_relabeled=4,
+        buffer_size=1e6,
+        num_episodes=16,
+        steps_per_episode=50,
+        gamma=0.98,
+        opt_steps=40,
+        batch_size=128,
+        log_interval=5,
 ):
     """Main loop for training DQN on the sawyer environment. The DQN is
     trained for num_epochs. In each epoch, the agent runs in the environment
@@ -201,7 +221,8 @@ def train(
 
         if epoch_idx % log_interval == 0:
             print(
-                f"Epoch: {epoch_idx} Cumulative reward: {total_reward} Success rate: {np.mean(successes)} Mean loss: {np.mean(losses)}" # pylint: disable=line-too-long
+                f"Epoch: {epoch_idx} Cumulative reward: {total_reward} Success rate: {np.mean(successes)} Mean loss: {np.mean(losses)}"
+                # pylint: disable=line-too-long
             )
             writer.add_scalar(
                 "eval_metrics/total_reward", total_reward, epoch_idx)
